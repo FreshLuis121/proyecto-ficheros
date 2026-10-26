@@ -26,8 +26,8 @@ const val TITULO_CHARS = 40
 const val GENERO_CHARS = 20
 
 const val TAMANO_ID = Int.SIZE_BYTES // 4 bytes
-const val TAMANO_TITULO_BYTES = TITULO_CHARS * 2 // 80 bytes (2 bytes por char)
-const val TAMANO_GENERO_BYTES = GENERO_CHARS * 2 // 40 bytes (2 bytes por char)
+const val TAMANO_TITULO_BYTES = TITULO_CHARS * 2 // 80 bytes
+const val TAMANO_GENERO_BYTES = GENERO_CHARS * 2 // 40 bytes
 const val TAMANO_ANIO = Int.SIZE_BYTES // 4 bytes
 const val TAMANO_NOTA = Double.SIZE_BYTES // 8 bytes
 
