@@ -21,10 +21,18 @@ val rutaXML: Path = Path.of("datos", "datos_ini", "videojuegos.xml")
 val rutaJSON: Path = Path.of("datos", "datos_ini", "videojuegos.json")
 val rutaBinario: Path = Path.of("datos", "datos_fin", "videojuegos.dat")
 
-// Constantes para Fichero Binario
-const val TITULO_LEN = 40
-const val GENERO_LEN = 20
-const val RECORD_SIZE = 4 + (TITULO_LEN * 2) + (GENERO_LEN * 2) + 4 + 8
+// Constantes de longitud en caracteres y bytes para el fichero binario
+const val TITULO_CHARS = 40
+const val GENERO_CHARS = 20
+
+const val TAMANO_ID = Int.SIZE_BYTES // 4 bytes
+const val TAMANO_TITULO_BYTES = TITULO_CHARS * 2 // 80 bytes (2 bytes por char)
+const val TAMANO_GENERO_BYTES = GENERO_CHARS * 2 // 40 bytes (2 bytes por char)
+const val TAMANO_ANIO = Int.SIZE_BYTES // 4 bytes
+const val TAMANO_NOTA = Double.SIZE_BYTES // 8 bytes
+
+// Tamaño total exacto del registro: 4 + 80 + 40 + 4 + 8 = 136 bytes
+const val TAMANO_REGISTRO = TAMANO_ID + TAMANO_TITULO_BYTES + TAMANO_GENERO_BYTES + TAMANO_ANIO + TAMANO_NOTA
 
 // Función para leer el CSV y convertirlo en la lista de objetos Videojuego
 fun leerDatosCSV(ruta: Path): MutableList<Videojuego> {
@@ -227,7 +235,8 @@ fun readFixedString(raf: RandomAccessFile, length: Int): String {
     }
     return String(chars).trim()
 }
-//Borra el binario anterior y guarda los datos del CSV y intercambio aquí
+
+// Borra el binario anterior y guarda los datos del CSV o intercambio aquí
 fun importarABinario(origen: Path, origenLectura: (Path) -> List<Videojuego>) {
     try {
         if (Files.notExists(rutaBinario.parent)) {
@@ -238,13 +247,13 @@ fun importarABinario(origen: Path, origenLectura: (Path) -> List<Videojuego>) {
             println("El fichero origen está vacío. No se pudo importar.")
             return
         }
-// Abrimos el fichero binario en modo lectura y escritura
+        // Abrimos el fichero binario en modo lectura y escritura
         RandomAccessFile(rutaBinario.toFile(), "rw").use { raf ->
             raf.setLength(0)
             for (v in lista) {
                 raf.writeInt(v.id)
-                writeFixedString(raf, v.titulo, TITULO_LEN)
-                writeFixedString(raf, v.genero, GENERO_LEN)
+                writeFixedString(raf, v.titulo, TITULO_CHARS)
+                writeFixedString(raf, v.genero, GENERO_CHARS)
                 raf.writeInt(v.anio)
                 raf.writeDouble(v.nota)
             }
@@ -256,7 +265,8 @@ fun importarABinario(origen: Path, origenLectura: (Path) -> List<Videojuego>) {
         println("Error al importar al fichero binario: ${e.message}")
     }
 }
-//Lee el fichero binario entero y lo muestra por la consola
+
+// Lee el fichero binario entero y lo muestra por la consola
 fun leerFicheroBinario() {
     if (!Files.exists(rutaBinario)) {
         println("El fichero binario aún no existe. Importa datos primero.")
@@ -268,8 +278,8 @@ fun leerFicheroBinario() {
             println("\n===== CONTENIDO DEL FICHERO BINARIO =====")
             while (raf.filePointer < raf.length()) {
                 val id = raf.readInt()
-                val titulo = readFixedString(raf, TITULO_LEN)
-                val genero = readFixedString(raf, GENERO_LEN)
+                val titulo = readFixedString(raf, TITULO_CHARS)
+                val genero = readFixedString(raf, GENERO_CHARS)
                 val anio = raf.readInt()
                 val nota = raf.readDouble()
                 println("ID: $id | Título: $titulo | Género: $genero | Año: $anio | Nota: $nota")
@@ -280,6 +290,7 @@ fun leerFicheroBinario() {
         println("Error al leer el fichero binario: ${e.message}")
     }
 }
+
 // Función para comprobar si un ID ya está guardado en el binario
 fun existeIdEnBinario(idBuscado: Int): Boolean {
     if (!Files.exists(rutaBinario)) return false
@@ -287,12 +298,14 @@ fun existeIdEnBinario(idBuscado: Int): Boolean {
         while (raf.filePointer < raf.length()) {
             val id = raf.readInt()
             if (id == idBuscado) return true
-            raf.seek(raf.filePointer + RECORD_SIZE - 4)
+            // Salta exactamente el resto del registro actual (136 - 4 leídos = 132 bytes)
+            raf.seek(raf.filePointer + TAMANO_REGISTRO - TAMANO_ID)
         }
     }
     return false
 }
-//Pide un ID nuevo y los datos, y los añade al final del fichero binario
+
+// Pide un ID nuevo y los datos, y los añade al final del fichero binario
 fun añadirRegistroBinario() {
     var id: Int
     while (true) {
@@ -342,8 +355,8 @@ fun añadirRegistroBinario() {
         RandomAccessFile(rutaBinario.toFile(), "rw").use { raf ->
             raf.seek(raf.length())
             raf.writeInt(id)
-            writeFixedString(raf, titulo, TITULO_LEN)
-            writeFixedString(raf, genero, GENERO_LEN)
+            writeFixedString(raf, titulo, TITULO_CHARS)
+            writeFixedString(raf, genero, GENERO_CHARS)
             raf.writeInt(anio)
             raf.writeDouble(nota)
         }
@@ -352,7 +365,8 @@ fun añadirRegistroBinario() {
         println("Error al añadir el registro: ${e.message}")
     }
 }
-//Busca un videojuego por su ID y actualiza sus datos
+
+// Busca un videojuego por su ID y actualiza sus datos
 fun modificarRegistroBinario() {
     if (!Files.exists(rutaBinario)) {
         println("El fichero binario está vacío o no existe.")
@@ -376,11 +390,12 @@ fun modificarRegistroBinario() {
             while (raf.filePointer < raf.length()) {
                 val posicionRegistro = raf.filePointer
                 val id = raf.readInt()
-                val tituloActual = readFixedString(raf, TITULO_LEN)
-                val generoActual = readFixedString(raf, GENERO_LEN)
+                val tituloActual = readFixedString(raf, TITULO_CHARS)
+                val generoActual = readFixedString(raf, GENERO_CHARS)
                 val anioActual = raf.readInt()
                 val notaActual = raf.readDouble()
-// Si coincide el ID, modificamos
+
+                // Si coincide el ID, modificamos
                 if (id == idBuscado) {
                     encontrado = true
                     println("¡Encontrado! Videojuego: '$tituloActual' (Género: $generoActual, Año: $anioActual, Nota: $notaActual)")
@@ -392,11 +407,12 @@ fun modificarRegistroBinario() {
                     print("Introduce la nueva nota (o pulsa enter para dejarla igual): ")
                     val nuevaNotaInput = readlnOrNull()?.toDoubleOrNull()
                     val notaFinal = nuevaNotaInput ?: notaActual
-// Volvemos al inicio exacto del registro para sobrescribirlo con los nuevos datos
+
+                    // Volvemos al inicio exacto del registro para sobrescribirlo con los nuevos datos
                     raf.seek(posicionRegistro)
                     raf.writeInt(id)
-                    writeFixedString(raf, tituloFinal, TITULO_LEN)
-                    writeFixedString(raf, generoActual, GENERO_LEN)
+                    writeFixedString(raf, tituloFinal, TITULO_CHARS)
+                    writeFixedString(raf, generoActual, GENERO_CHARS)
                     raf.writeInt(anioActual)
                     raf.writeDouble(notaFinal)
 
@@ -412,7 +428,8 @@ fun modificarRegistroBinario() {
         println("Error al modificar el registro: ${e.message}")
     }
 }
-//Busca un ID, pide confirmación y lo borra recreando el fichero sin él
+
+// Busca un ID, pide confirmación y lo borra recreando el fichero sin él
 fun eliminarRegistroBinario() {
     if (!Files.exists(rutaBinario)) {
         println("El fichero binario está vacío o no existe.")
@@ -432,12 +449,12 @@ fun eliminarRegistroBinario() {
 
     try {
         var encontrado = false
-//Comprobamos si existe para avisar al usuario
+        // Comprobamos si existe para avisar al usuario
         RandomAccessFile(rutaBinario.toFile(), "r").use { raf ->
             while (raf.filePointer < raf.length()) {
                 val id = raf.readInt()
-                val titulo = readFixedString(raf, TITULO_LEN)
-                val genero = readFixedString(raf, GENERO_LEN)
+                val titulo = readFixedString(raf, TITULO_CHARS)
+                val genero = readFixedString(raf, GENERO_CHARS)
                 val anio = raf.readInt()
                 val nota = raf.readDouble()
 
@@ -456,21 +473,21 @@ fun eliminarRegistroBinario() {
         print("¿Estás seguro de que deseas eliminar este registro? (s/n): ")
         val confirmacion = readlnOrNull()?.trim()?.lowercase()
         if (confirmacion == "s" || confirmacion == "si") {
-            //Para borrar en un fichero binario de tamaño fijo, leemos todo y reescribimos omitiendo el ID borrado
+            // Para borrar en un fichero binario de tamaño fijo, leemos todo y reescribimos omitiendo el ID borrado
             RandomAccessFile(rutaBinario.toFile(), "rw").use { rafR ->
                 RandomAccessFile(rutaBinario.toFile(), "r").use { rafL ->
                     rafR.setLength(0)
                     while (rafL.filePointer < rafL.length()) {
                         val id = rafL.readInt()
-                        val titulo = readFixedString(rafL, TITULO_LEN)
-                        val genero = readFixedString(rafL, GENERO_LEN)
+                        val titulo = readFixedString(rafL, TITULO_CHARS)
+                        val genero = readFixedString(rafL, GENERO_CHARS)
                         val anio = rafL.readInt()
                         val nota = rafL.readDouble()
-                        //Guardamos todos menos el que queremos eliminar
+                        // Guardamos todos menos el que queremos eliminar
                         if (id != idBuscado) {
                             rafR.writeInt(id)
-                            writeFixedString(rafR, titulo, TITULO_LEN)
-                            writeFixedString(rafR, genero, GENERO_LEN)
+                            writeFixedString(rafR, titulo, TITULO_CHARS)
+                            writeFixedString(rafR, genero, GENERO_CHARS)
                             rafR.writeInt(anio)
                             rafR.writeDouble(nota)
                         }
